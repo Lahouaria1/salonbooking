@@ -1,0 +1,28 @@
+version: "3"
+services:
+  salonbooking:
+    build: .  # Make sure your Dockerfile is in the current directory
+    ports:
+      - "3000:3000"
+    environment:
+      - MYSQL_HOST=mysql-container  # Use the correct MySQL container name here
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=Mamamouad76@
+      - MYSQL_DATABASE=salonbooking
+    depends_on:
+      - mysql-container  # Make sure it matches the service name
+
+  mysql-container:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: Mamamouad76@
+      MYSQL_DATABASE: salonbooking
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql  # Persist MySQL data
+    restart: always
+
+volumes:
+  mysql-data:
+    driver: local

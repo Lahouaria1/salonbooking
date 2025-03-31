@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Salon Booking</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="path_to_your_favicon/favicon.ico">
+
+  <script defer src="script.js"></script>
+</head>
+<body>
+
+  <header>
+    <h1>Salon Booking System</h1>
+    <button onclick="logout()">Logout</button>
+  </header>
+
+  <main>
+    <section class="appointment-form">
+      <h2>Book an Appointment</h2>
+      <form id="appointmentForm">
+        <label for="service">Service:</label>
+        <select id="service" required>
+          <option value="Haircut">Haircut</option>
+          <option value="Massage">Massage</option>
+          <option value="Manicure">Manicure</option>
+          <option value="Pedicure">Pedicure</option>
+        </select>
+
+        <label for="appointmentDate">Appointment Date:</label>
+        <input type="datetime-local" id="appointmentDate" required>
+
+        <button type="submit">Book Appointment</button>
+      </form>
+    </section>
+
+    <section class="appointments">
+      <h2>Upcoming Appointments</h2>
+      <ul id="appointmentsList"></ul>
+    </section>
+  </main>
+
+</body>
+</html>
