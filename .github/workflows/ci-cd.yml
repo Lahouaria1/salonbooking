@@ -1,4 +1,4 @@
- name: CI/CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
@@ -61,4 +61,3 @@ jobs:
     steps:
       - name: Deploy to test environment
         run: echo "Deploying application..."
-
