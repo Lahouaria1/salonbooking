@@ -1,60 +1,82 @@
-stages:
-  - build
-  - test
-  - security
-  - deploy
+name: CI/CD Pipeline
 
-variables:
-  DOCKER_DRIVER: overlay2
-  IMAGE_TAG: "$CI_REGISTRY/$CI_PROJECT_PATH:$CI_COMMIT_REF_NAME"
+on:
+  push:
+    branches:
+      - main  # Trigger the workflow on push to the main branch
+  pull_request:
+    branches:
+      - main  # Trigger the workflow on pull requests to the main branch
 
-# Cache for node_modules to speed up subsequent builds
-cache:
-  paths:
-    - node_modules/
+jobs:
+  # Build Job
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-before_script:
-  - echo "Setting up Docker environment"
-  - curl -fsSL https://get.docker.com/ | sh
-  - docker version
+      - name: Set up Docker
+        run: |
+          curl -fsSL https://get.docker.com/ | sh
+          docker version
 
-# Build Stage
-build:
-  stage: build
-  script:
-    - echo "Building Docker image..."
-    - docker build -t $IMAGE_TAG .
-  tags:
-    - docker
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.DOCKER_REGISTRY }}/$GITHUB_REPOSITORY:${{ github.sha }} .
 
-# Test Stage
-test:
-  stage: test
-  script:
-    - echo "Running tests..."
-    - npm install
-    - npm test
-  tags:
-    - docker
+  # Test Job
+  test:
+    runs-on: ubuntu-latest
+    needs: build  # This job depends on the build job
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-# Security Scan Stage
-security:
-  stage: security
-  script:
-    - echo "Running security scans..."
-    - npm audit --audit-level=high # Scan Node.js packages for vulnerabilities
-    - npx snyk test || true  # Run Snyk security test
-    - trivy image $IMAGE_TAG  # Run Trivy container scan to find vulnerabilities
-  tags:
-    - docker
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'  # Set your required Node.js version
 
-# Deploy Stage (Optional for testing)
-deploy:
-  stage: deploy
-  script:
-    - echo "Deploying to test environment..."
-    - docker-compose -f docker-compose.yml up -d  # Run Docker Compose to deploy app
-  only:
-    - main
-  tags:
-    - docker
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+  # Security Scan Job
+  security:
+    runs-on: ubuntu-latest
+    needs: test  # This job depends on the test job
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run security scans
+        run: |
+          npm audit --audit-level=high  # Scan Node.js packages for vulnerabilities
+          npx snyk test || true         # Run Snyk security test
+          trivy image ${{ secrets.DOCKER_REGISTRY }}/$GITHUB_REPOSITORY:${{ github.sha }}  # Run Trivy container scan
+
+  # Deploy Job
+  deploy:
+    runs-on: ubuntu-latest
+    needs: security  # This job depends on the security job
+    if: github.ref == 'refs/heads/main'  # Only deploy from the main branch
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Compose
+        run: |
+          curl -fsSL https://get.docker.com/ | sh
+          docker version
+
+      - name: Deploy with Docker Compose
+        run: |
+          docker-compose -f docker-compose.yml up -d
+        env:
+          DOCKER_IMAGE: ${{ secrets.DOCKER_REGISTRY }}/$GITHUB_REPOSITORY:${{ github.sha }}
