@@ -1,2 +1,0 @@
-"# My Fresh Start" 
-"# salonbooking" 
