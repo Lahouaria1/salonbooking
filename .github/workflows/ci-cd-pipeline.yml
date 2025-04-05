@@ -1,67 +1,98 @@
-name: Simple CI/CD Pipeline
+name: Secure CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main  # Trigger the workflow on push to the main branch
+    branches: [main, dev]
   pull_request:
-    branches:
-      - main  # Trigger the workflow on pull requests to the main branch
+    branches: [main, dev]
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # The operating system for the CI job
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3  # Checkout the repository code
+      - uses: actions/checkout@v3
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'  # Specify the Node.js version you are using
+          node-version: '18'
 
       - name: Install dependencies
-        run: npm install  # Install dependencies
+        run: npm install
 
-      - name: Run tests
-        run: npm test  # Run the tests you have in your test file
-
-  # Optionally, if you want to build and push a Docker image, you can add a Docker job
-  docker_build:
+  test:
     runs-on: ubuntu-latest
+    needs: build
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
-      - name: Set up Docker
-        run: |
-          curl -fsSL https://get.docker.com/ | sh  # Installs Docker
-          sudo systemctl start docker  # Start Docker service
-          docker version  # Verify Docker installation
+      - run: npm install
+      - run: npm test
+
+  security:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run npm audit (SCA)
+        run: npm audit --audit-level=high
+
+      - name: Install Snyk
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+
+      - name: Run Snyk Code scan (SAST)
+        run: snyk code test --severity-threshold=high
+
+      - name: Run Snyk Open Source scan (SCA)
+        run: snyk test --severity-threshold=high
+
+  docker_scan:
+    runs-on: ubuntu-latest
+    needs: security
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
-        run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/$GITHUB_REPOSITORY:${{ github.sha }} .  # Build the Docker image
+        run: docker buildx build --load -t myapp:${{ github.sha }} .
 
-  # Optionally, deploy the Docker image
+      - name: Install Trivy
+        run: |
+          sudo apt-get update && sudo apt-get install -y wget
+          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.1_Linux-64bit.deb
+          sudo dpkg -i trivy_0.50.1_Linux-64bit.deb
+
+      - name: Run Trivy scan
+        run: trivy image --severity HIGH,CRITICAL myapp:${{ github.sha }}
+
   deploy:
     runs-on: ubuntu-latest
-    needs: docker_build  # Ensure this job runs after the Docker image is built
+    needs: docker_scan
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}  # Docker Hub username
-          password: ${{ secrets.DOCKER_PASSWORD }}  # Docker Hub password or token
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Push Docker image
+      - name: Tag and Push Docker image
         run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/$GITHUB_REPOSITORY:${{ github.sha }}  # Push the image to Docker Hub
-          docker push ${{ secrets.DOCKER_USERNAME }}/$GITHUB_REPOSITORY:latest  # Push the latest tag
+          docker tag myapp:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/myapp:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/myapp:latest
 
       - name: Deploy with Docker Compose
-        run: |
-          docker-compose -f docker-compose.yml up -d  # Deploy using Docker Compose
+        run: docker-compose -f docker-compose.yml up -d
